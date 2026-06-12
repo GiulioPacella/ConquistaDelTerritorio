@@ -23,9 +23,9 @@
 #define MAPPA_H        20    /* numero di righe   (coordinata y: 0..MAPPA_H-1) */
 #define MAPPA_W        20    /* numero di colonne (coordinata x: 0..MAPPA_W-1) */
 #define R_FOG          2     /* raggio fog-of-war: finestra (2*R_FOG+1) = 5x5   */
-#define T_BROADCAST    5     /* secondi tra un broadcast GLOBAL e il successivo */
-#define T_FLASH        3     /* durata della "luce globale" dopo ogni GLOBAL (s); < T_BROADCAST */
-#define T_PARTITA      180   /* durata massima di una partita, in secondi       */
+#define T_BROADCAST    20     /* secondi tra un broadcast GLOBAL e il successivo */
+#define T_FLASH        2    /* durata della "luce globale" dopo ogni GLOBAL (s); < T_BROADCAST */
+#define T_PARTITA      100  /* durata massima di una partita, in secondi       */
 #define DENSITA_MURI   20    /* densità muri in percentuale (~20%)              */
 
 /* ===== Limiti e protezione contro input malevolo ===== */

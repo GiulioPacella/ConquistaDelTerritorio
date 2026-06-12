@@ -78,8 +78,9 @@ In `common.h`: `MAPPA_H`, `MAPPA_W`, `R_FOG`, `T_BROADCAST`, `T_PARTITA`,
 
 - Le password sono salvate **in chiaro** in `users.dat` (semplificazione didattica,
   vedi commenti in `users.c`).
-- Il server usa `select()`: gli fd restano sotto `FD_SETSIZE` (1024); `MAX_CLIENT`
-  è 64.
+- Il server usa `select()`: gli fd devono restare sotto `FD_SETSIZE` (1024). Per
+  onorare il "nessun limite a priori" della traccia, `MAX_CLIENT` è portato vicino
+  a quel tetto (`1000`); oltre `FD_SETSIZE` le connessioni sono rifiutate.
 - Verifica memoria: `valgrind --leak-check=full ./server <porta>`. Il codice è scritto
   per essere *valgrind-clean* (l'unica allocazione dinamica è la coda di output, sempre
   liberata alla disconnessione e allo shutdown).

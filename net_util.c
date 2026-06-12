@@ -164,7 +164,7 @@ int crea_listening_socket(int porta) {
         close(fd);
         return -1;
     }
-    if (listen(fd, 16) < 0) {
+    if (listen(fd, 128) < 0) {
         close(fd);
         return -1;
     }

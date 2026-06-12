@@ -23,8 +23,10 @@
  * partita. Tutti i socket sono non bloccanti. Nessun fork/thread/IPC: lo stato
  * è in normali strutture in memoria del processo.
  *
- * Vincolo FD_SETSIZE: gli fd devono restare sotto FD_SETSIZE (1024). Con
- * MAX_CLIENT = 64 siamo ampiamente entro il limite.
+ * Vincolo FD_SETSIZE: gli fd devono restare sotto FD_SETSIZE (1024), perché
+ * FD_SET su un fd >= FD_SETSIZE è undefined behavior. MAX_CLIENT è portato
+ * vicino a quel tetto (1000) per onorare il piu' possibile il "nessun limite a
+ * priori" della traccia; oltre, le connessioni vengono rifiutate.
  *
  * Il server NON scrive su stdout e NON legge da stdin; usa stderr solo per
  * errori fatali in fase di avvio.
@@ -227,12 +229,21 @@ static void accetta_connessioni(void) {
             if (errno == EINTR) continue;                 /* riprova */
             break;  /* EAGAIN/EWOULDBLOCK: nessun'altra connessione pronta */
         }
+        /* select() gestisce solo fd < FD_SETSIZE: oltre, FD_SET sarebbe
+           undefined behavior. Rifiuta la connessione se l'fd supera il tetto
+           di sistema. */
+        if (fd >= FD_SETSIZE) {
+            const char *m = REP_ERR " server pieno (limite di sistema)\n";
+            send(fd, m, strlen(m), MSG_NOSIGNAL);
+            close(fd);
+            continue;
+        }
         /* cerca uno slot libero */
         int slot = -1;
         for (int i = 0; i < MAX_CLIENT; i++)
             if (!giocatori[i].attivo) { slot = i; break; }
         if (slot < 0) {
-            /* server pieno: avvisa e chiudi */
+            /* tutti gli slot in uso: avvisa e chiudi */
             const char *m = REP_ERR " server pieno\n";
             send(fd, m, strlen(m), MSG_NOSIGNAL);
             close(fd);

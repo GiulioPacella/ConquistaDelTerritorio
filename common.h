@@ -32,13 +32,22 @@
 #define MAX_LINE       1024  /* lunghezza massima di una riga di protocollo (byte) */
 #define MAX_NICK       31    /* lunghezza massima di un nickname (caratteri)       */
 #define MAX_PASS       31    /* lunghezza massima di una password (caratteri)      */
-#define MAX_CLIENT     64    /* numero massimo di client simultanei                */
+#define MAX_CLIENT     1000  /* numero massimo di client simultanei                */
 
 /*
- * Nota sul limite FD_SETSIZE: il server usa select(), quindi tutti i file
- * descriptor devono restare sotto FD_SETSIZE (tipicamente 1024). MAX_CLIENT è
- * tenuto basso (64) ed è ampiamente entro il limite; non è richiesto scalare
- * oltre questa soglia.
+ * Nota sul limite MAX_CLIENT e FD_SETSIZE.
+ *
+ * La traccia chiede "nessun limite a priori" al numero di utenti. Un numero
+ * davvero illimitato non è ottenibile con select(): tutti i file descriptor
+ * gestiti devono restare sotto FD_SETSIZE (tipicamente 1024) perché FD_SET su un
+ * fd >= FD_SETSIZE è undefined behavior. Il limite quindi NON è una scelta
+ * arbitraria ma è imposto dal meccanismo di multiplexing adottato.
+ *
+ * MAX_CLIENT è perciò portato vicino a quel tetto (1000), lasciando margine per
+ * gli fd riservati (stdin/stdout/stderr, il listening socket, l'handle
+ * temporaneo su users.dat durante register/login). Il server applica comunque
+ * una guardia a runtime: se un fd accettato risulta >= FD_SETSIZE la connessione
+ * viene rifiutata (vedi accetta_connessioni in server.c).
  */
 
 /* ===== Macchina a stati del client (vista dal server) ===== */

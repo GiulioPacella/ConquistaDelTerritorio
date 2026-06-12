@@ -74,8 +74,12 @@ classici:
   3. **timer integrato**: il `timeout` di `select()` fornisce il "battito" per il
      broadcast periodico e per il controllo del timeout globale, senza thread
      timer dedicati;
-  4. **scalabilità sufficiente**: con `FD_SETSIZE = 1024` e `MAX_CLIENT = 64`
-     siamo ampiamente entro i limiti.
+  4. **scalabilità**: la traccia chiede "nessun limite a priori" al numero di
+     utenti. Con `select()` il vero tetto è `FD_SETSIZE` (tipicamente 1024),
+     perché `FD_SET` su un fd `>= FD_SETSIZE` è undefined behavior. Il limite non
+     è quindi arbitrario ma imposto dal multiplexing: `MAX_CLIENT` è portato
+     vicino a quel tetto (`1000`, con margine per gli fd riservati) e il server
+     applica una guardia a runtime che rifiuta gli fd `>= FD_SETSIZE`.
 
 Lo svantaggio teorico (un client lentissimo potrebbe rallentare gli altri) è
 neutralizzato rendendo **tutti i socket non bloccanti** e **accodando l'output**:

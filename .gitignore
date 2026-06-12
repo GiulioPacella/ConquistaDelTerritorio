@@ -1,0 +1,9 @@
+# Eseguibili
+/server
+/client
+
+# File oggetto
+*.o
+
+# Dati a runtime (account con password in chiaro)
+users.dat

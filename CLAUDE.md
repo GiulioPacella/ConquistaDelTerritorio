@@ -16,6 +16,8 @@ make clean      # rimuove eseguibili e *.o
 
 ./server <porta> [seed]      # seed opzionale = mappa riproducibile
 ./client <host> <porta>
+
+valgrind --leak-check=full ./server <porta>   # verifica memoria (deve restare clean)
 ```
 
 Non esiste una suite di test automatica. Si verifica a mano con `nc` o con un driver

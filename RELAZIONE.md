@@ -9,7 +9,7 @@ I/O multiplexing), senza fork, thread o memoria condivisa.
 
 ## Indice
 
-1. [Architettura generale](#1-architettura-generale)
+1. [Architettura del sistema](#1-architettura-del-sistema)
 2. [Perché `select()` e non fork/thread](#2-perché-select-e-non-forkthread)
 3. [Il protocollo applicativo (con esempi reali)](#3-il-protocollo-applicativo-con-esempi-reali)
 4. [Strutture dati](#4-strutture-dati)
@@ -22,7 +22,22 @@ I/O multiplexing), senza fork, thread o memoria condivisa.
 
 ---
 
-## 1. Architettura generale
+## 1. Architettura del sistema
+
+### 1.1 Paradigma client-server
+
+Il programma è realizzato secondo un'architettura **client-server**: due programmi
+distinti, eseguiti come processi separati (tipicamente su macchine diverse), che
+comunicano attraverso la rete tramite socket **TCP**. I ruoli sono nettamente
+separati e asimmetrici:
+
+- il **server** è il programma centrale, sempre in esecuzione, che ospita e governa
+  la partita. Mantiene lo stato del gioco, riceve i comandi dai giocatori, ne
+  verifica la legittimità, aggiorna il mondo di conseguenza e comunica a ciascuno
+  ciò che deve vedere. Un unico server serve simultaneamente **più client**;
+- il **client** è il programma con cui interagisce il singolo giocatore. Si occupa
+  dell'interfaccia utente: legge i comandi da tastiera, li inoltra al server e
+  disegna a schermo le informazioni ricevute. Non prende alcuna decisione di gioco.
 
 ```
    ┌──────────────┐                         ┌──────────────────────────────┐
@@ -36,22 +51,60 @@ I/O multiplexing), senza fork, thread o memoria condivisa.
    └──────────────┘                         └──────────────────────────────┘
 ```
 
-Il server è **l'unica fonte di verità**: i client sono volutamente "stupidi",
-inoltrano i comandi dell'utente e disegnano ciò che ricevono. Questo concentra la
-logica in un solo punto, elimina la possibilità di imbrogli e semplifica il codice
-del client.
+### 1.2 Il server: unica fonte di verità
 
-Il progetto è **modulare**:
+Il server è **autorevole**: l'intera logica di gioco risiede esclusivamente al suo
+interno. È l'unico a conoscere la mappa completa, a decidere l'esito di ogni mossa,
+a calcolare i punteggi e a scandire il tempo di partita. In particolare il server:
 
-| Modulo            | Responsabilità                                                 |
-|-------------------|----------------------------------------------------------------|
-| `common.h`        | parametri, limiti, feature-test macro, enum di stato           |
-| `protocol.h`      | costanti e documentazione del protocollo, simboli delle mappe  |
-| `net_util.[ch]`   | socket, buffer di input (framing a righe), coda di output      |
-| `users.[ch]`      | registrazione/verifica account, persistenza su `users.dat`     |
-| `game.[ch]`       | mappa, mosse, fog-of-war, punteggi, serializzazione messaggi   |
-| `server.c`        | orchestrazione: loop `select()`, dispatch, broadcast, segnali  |
-| `client.c`        | UI interattiva non bloccante e rendering ASCII/colori          |
+- accetta le connessioni in arrivo e gestisce il ciclo di vita di ogni client;
+- autentica gli utenti (registrazione e login) e ne **persiste** gli account;
+- **valida** ogni comando ricevuto rispetto alle regole e allo stato del giocatore;
+- aggiorna lo stato del mondo (posizioni, proprietà delle celle, punteggi);
+- invia a ciascun client la propria visuale (la "torcia") e, periodicamente, una
+  panoramica globale a tutti.
+
+Concentrare la logica in un solo punto porta due vantaggi decisivi: **elimina la
+possibilità di imbrogli** (il client non può alterare lo stato, può solo chiederne
+la modifica) e **azzera le race condition**, perché un unico processo elabora un
+comando per volta senza stato condiviso tra flussi concorrenti (§2).
+
+### 1.3 Il client: interfaccia sottile
+
+Il client è volutamente **"leggero"**: non replica né conosce le regole del gioco.
+Le sue uniche responsabilità sono presentare l'interfaccia all'utente e mediare la
+comunicazione con il server. In particolare:
+
+- si connette al server e gli inoltra i comandi digitati dall'utente;
+- riceve i messaggi del server e **rende a schermo** la mappa in ASCII (con colori
+  opzionali);
+- mantiene un **modello locale** di ciò che ha già visto (muri scoperti, proprietà,
+  posizioni) al solo scopo di disegnare una vista coerente tra un aggiornamento e
+  l'altro.
+
+Questa asimmetria — server "spesso", client "sottile" — è la scelta architetturale
+portante: semplifica il client, rende il sistema robusto e sposta ogni complessità
+in un unico luogo controllabile e testabile.
+
+### 1.4 Organizzazione modulare
+
+Definiti i due ruoli, il codice è suddiviso in **moduli** a responsabilità singola,
+condivisi o specifici tra le due parti:
+
+| Modulo            | Lato    | Responsabilità                                              |
+|-------------------|---------|-------------------------------------------------------------|
+| `common.h`        | comune  | parametri, limiti, feature-test macro, enum di stato        |
+| `protocol.h`      | comune  | costanti del protocollo, simboli delle mappe                |
+| `net_util.[ch]`   | comune  | socket, buffer di input (framing a righe), coda di output   |
+| `users.[ch]`      | server  | registrazione/verifica account, persistenza su `users.dat`  |
+| `game.[ch]`       | server  | mappa, mosse, fog-of-war, punteggi, serializzazione messaggi|
+| `server.c`        | server  | orchestrazione: loop `select()`, dispatch, broadcast, segnali|
+| `client.c`        | client  | UI interattiva non bloccante e rendering ASCII/colori       |
+
+I moduli `net_util`, `common.h` e `protocol.h` sono **condivisi**: definiscono il
+"contratto" comune (formato dei messaggi e primitive di rete) che client e server
+devono rispettare in modo identico. I capitoli seguenti scendono nel dettaglio,
+partendo dal modello di concorrenza del server (§2) e dal protocollo (§3).
 
 ---
 

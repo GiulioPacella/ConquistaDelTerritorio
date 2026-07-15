@@ -145,25 +145,42 @@ int imposta_nonblocking(int fd) {
 }
 
 int crea_listening_socket(int porta) {
+    
+    // crea la scoket usando come famiglia di indirizzi IPv4 (AF_INET), come tipo di socket TCP (SOCK_STREAM) e 
+    //protocollo 0 (che indica al sistema operativo di scegliere il protocollo corretto in base al tipo di socket)
+    // gestisce l'errore se la creazione della socket fallisce (ritorna -1)
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
 
     int yes = 1;
+    
+    // set sock option per riutilizzare l'indirizzo del socket (SO_REUSEADDR) in modo da poter riavviare il server senza dover aspettare che il sistema operativo liberi la porta
+    // altrimenti il binding fallirebbe se il server viene riavviato subito dopo la chiusura (ci mette un minutino a liberare l'indirizzo TIME_WAIT)
+    // yes = 1 significa attivare l'opzione, sizeof yes indica la dimensione del valore da impostare
+    // SOL_SOCKET = l'opzione si applica al livello del socket stesso, non a un protocollo specifico
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) < 0) {
         close(fd);
         return -1;
     }
 
+    // preparazione dell'indirizzo del socket per il binding: struct sockaddr_in è una struttura che rappresenta un indirizzo IPv4
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof addr);
+    // di nuovo IpV4 come famiglia di indrizzi, coerente col socket
     addr.sin_family = AF_INET;
+    // htonl = host to network long, converte l'indirizzo IP da formato host (endianness della macchina) a formato di rete (big-endian)
+    // INADDR_ANY = mettiti in ascolto su tutte le interfacce di rete disponibili (se mettessi localhost accetterebbe connessioni solo dalla stessa macchina)
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    
+    // htons = host to network short, converte la porta da formato host a formato di rete (big-endian)
     addr.sin_port = htons((uint16_t)porta);
 
+    // assegna l'indirizzo al socket appena creato, in modo che il socket sappia su quale indirizzo e porta ascoltare le connessioni in arrivo
     if (bind(fd, (struct sockaddr *)&addr, sizeof addr) < 0) {
         close(fd);
         return -1;
     }
+    // mette il socket in modalità ascolto, pronto ad accettare connessioni in arrivo (fino a 128 connessioni in coda)
     if (listen(fd, 128) < 0) {
         close(fd);
         return -1;

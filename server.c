@@ -1,9 +1,9 @@
+
 #include "common.h"     /* PRIMO: feature-test macro */
 #include "protocol.h"
 #include "net_util.h"
 #include "game.h"
 #include "users.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +23,8 @@
  * partita. Tutti i socket sono non bloccanti. Nessun fork/thread/IPC: lo stato
  * è in normali strutture in memoria del processo.
  *
- * Vincolo FD_SETSIZE: gli fd devono restare sotto FD_SETSIZE (1024), perché
- * FD_SET su un fd >= FD_SETSIZE è undefined behavior. MAX_CLIENT è portato
- * vicino a quel tetto (1000) per onorare il piu' possibile il "nessun limite a
- * priori" della traccia; oltre, le connessioni vengono rifiutate.
+ * Vincolo FD_SETSIZE: gli fd devono restare sotto FD_SETSIZE (1024). Con
+ * MAX_CLIENT = 64 siamo ampiamente entro il limite.
  *
  * Il server NON scrive su stdout e NON legge da stdin; usa stderr solo per
  * errori fatali in fase di avvio.
@@ -42,8 +40,10 @@ static int       seed_fisso;                 /* 1 se il seed è fissato da riga 
 static volatile sig_atomic_t fermati = 0;    /* impostato dai segnali per uscire pulito   */
 
 /* ===== Gestione segnali ===== */
+
+// mette il flag fermati a 1, che indica al server di uscire pulito dal loop principale
 static void on_segnale(int s) {
-    (void)s;
+    (void)s; // serve solo a usare il parametro per non generale il warning "unused parameter", ma in realtà non mi interessa quale segnale è arrivato, voglio solo uscire pulito
     fermati = 1;
 }
 
@@ -64,6 +64,8 @@ static void srv_err(Giocatore *g, const char *msg) {
 }
 
 /* ===== Gestione slot/giocatori ===== */
+
+// Azzera e reimposta lo slot numero i dell'array dei giocatori, rendendolo pronto per essere riusato
 static void slot_init(int i) {
     memset(&giocatori[i], 0, sizeof giocatori[i]);
     giocatori[i].attivo = 0;
@@ -177,7 +179,6 @@ static int gestisci_riga(int i, char *linea) {
         snprintf(msg, sizeof msg, "login id=%d", g->id);
         srv_ok(g, msg);
         gioco_aggiorna_punteggi(&partita, giocatori, MAX_CLIENT);
-        invia_local(&g->out, &partita, g);    /* torcia: illumina i dintorni gia' allo spawn */
         invia_global(&g->out, &partita, giocatori, MAX_CLIENT);
         return 0;
     }
@@ -229,21 +230,12 @@ static void accetta_connessioni(void) {
             if (errno == EINTR) continue;                 /* riprova */
             break;  /* EAGAIN/EWOULDBLOCK: nessun'altra connessione pronta */
         }
-        /* select() gestisce solo fd < FD_SETSIZE: oltre, FD_SET sarebbe
-           undefined behavior. Rifiuta la connessione se l'fd supera il tetto
-           di sistema. */
-        if (fd >= FD_SETSIZE) {
-            const char *m = REP_ERR " server pieno (limite di sistema)\n";
-            send(fd, m, strlen(m), MSG_NOSIGNAL);
-            close(fd);
-            continue;
-        }
         /* cerca uno slot libero */
         int slot = -1;
         for (int i = 0; i < MAX_CLIENT; i++)
             if (!giocatori[i].attivo) { slot = i; break; }
         if (slot < 0) {
-            /* tutti gli slot in uso: avvisa e chiudi */
+            /* server pieno: avvisa e chiudi */
             const char *m = REP_ERR " server pieno\n";
             send(fd, m, strlen(m), MSG_NOSIGNAL);
             close(fd);
@@ -294,30 +286,52 @@ static void chiudi_tutto(void) {
 }
 
 int main(int argc, char *argv[]) {
+    
+    // Controlla che il numero di argomenti sia valido 
     if (argc < 2 || argc > 3) {
         fprintf(stderr, "uso: %s <porta> [seed]\n", argv[0]);
         return 1;
     }
+    // Atoi = ASCII to int 
     int porta = atoi(argv[1]);
+    
+    // Controlla la validità della porta 
     if (porta < 1 || porta > 65535) {
         fprintf(stderr, "porta non valida: %s\n", argv[1]);
         return 1;
     }
+
+    // Se è stato fornito un seed, lo converte in unsigned int (string to unsigned int)e imposta seed_fisso a 1. 
+    // NULL = dove salvare dove si ferma la conversione (null implica da nessuna parte), 10 = base decimale
     if (argc == 3) {
         seed_base = (unsigned int)strtoul(argv[2], NULL, 10);
         seed_fisso = 1;
     }
 
+    // Azzera e reimposta tutti gli slot dei giocatori, rendendoli pronti per essere riusati
     for (int i = 0; i < MAX_CLIENT; i++) slot_init(i);
 
-    /* segnali: SIGPIPE ignorato; SIGINT/SIGTERM → shutdown pulito */
+    // Ignora il segnale SIGPIPE, che viene generato quando si tenta di scrivere su un socket chiuso dal peer 
+    //(il client si è disconnesso e il server continua a mandargli roba)
     signal(SIGPIPE, SIG_IGN);
+    
+    // la struct sigaction è una shceda di configurazione che descrivi in modo personalizzato per dire
+    // al sistema operativo come gestire un segnale
     struct sigaction sa;
+    
+    // metto a 0 tutti i campi che contengono valori spazzatura (quello che c'era in memoria) che non mi interessano, come il campo sa_mask 
+    //(quali segnali bloccare) e sa_flags. mettendoli a 0 gli dico di usare i valori di default
     memset(&sa, 0, sizeof sa);
+
+    // imposto il campo sa_handler, che descrive la funzione da chiamare quando il segnale arriva, a on_segnale, che è la funzione che ho definito sopra
     sa.sa_handler = on_segnale;
+    
+    // le sigaction consegnano le schede di configurazioni struct al sistema, primo argomento quale segnale voglio gestire,
+    // secondo argomento la struct che descrive come gestirlo, terzo argomento è una struct che il sistema può usare per restituire la vecchia configurazione
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
+    
     listen_fd = crea_listening_socket(porta);
     if (listen_fd < 0) {
         fprintf(stderr, "impossibile creare il socket in ascolto sulla porta %d\n", porta);

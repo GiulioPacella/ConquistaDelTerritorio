@@ -79,7 +79,7 @@ void coda_init(CodaOut *c) {
     c->cap = 0;
 }
 
-void coda_free(CodaOut *c) {
+void coda_free(CodaOut *c)  {
     free(c->dati);
     coda_init(c);
 }

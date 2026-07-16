@@ -79,7 +79,7 @@ void coda_init(CodaOut *c) {
     c->cap = 0;
 }
 
-void coda_free(CodaOut *c)  {
+void coda_free(CodaOut *c) {
     free(c->dati);
     coda_init(c);
 }
@@ -181,6 +181,8 @@ int crea_listening_socket(int porta) {
         return -1;
     }
     // mette il socket in modalità ascolto, pronto ad accettare connessioni in arrivo (fino a 128 connessioni in coda)
+    // rende il socket passivo, ovvero il suo unico scopo è accettare connessioni in arrivo, non inviare o ricevere dati
+    // crea la lista di attesa per la connessione in arrivo, con una lunghezza massima di 128 connessioni in coda
     if (listen(fd, 128) < 0) {
         close(fd);
         return -1;

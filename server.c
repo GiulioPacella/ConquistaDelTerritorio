@@ -31,6 +31,8 @@
  */
 
 /* ===== Stato globale del server ===== */
+// array di 1000 slot per i giocatori, ogni casella può contenere un giocatore connesso o essere vuota
+// è la struct giocatore che tiee traccia dello stato della connessione (giocatore.attivo = 1 se lo slot è occupato dal client, giocatore.attivo = 0 se è libero)
 static Giocatore giocatori[MAX_CLIENT];
 static Mappa     partita;
 static int       listen_fd = -1;
@@ -331,7 +333,7 @@ int main(int argc, char *argv[]) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    
+    // restituisce l'fd della socket passiva in ascolto sulle nuove connessioni 
     listen_fd = crea_listening_socket(porta);
     if (listen_fd < 0) {
         fprintf(stderr, "impossibile creare il socket in ascolto sulla porta %d\n", porta);
@@ -343,32 +345,67 @@ int main(int argc, char *argv[]) {
 
     /* ===== Loop principale ===== */
     while (!fermati) {
+        // preparo i set di file descriptor da passare a select: rfds = read fds, wfds = write fds
         fd_set rfds, wfds;
+        
+        // ogni volta che viene usata la selct, essa distrugge il contenuto dei set restituendo solo i pronti, quindi ogni giro vanno riscritti da zero
+        // tramite FD_ZERO, che li azzera, e poi FD_SET, che aggiunge i file descriptor da monitorare
         FD_ZERO(&rfds);
         FD_ZERO(&wfds);
+        
+        // passo a rfds la socket in ascolto, che è quella che accetta le nuove connessioni, quindi in questo caso se la select mi dice che 
+        // è pronta, significa che c'è una nuova connessione in arrivo e posso chiamare accept per accettarla
         FD_SET(listen_fd, &rfds);
+        
+        // maxfd = il file descriptor più grande da passare a select, che è necessario perché select deve sapere quanti file descriptor deve controllare,
+        // per ora lo imposto a quello di listen_fd perchè è l'unico fd
         int maxfd = listen_fd;
 
+        // quando il server vuole fare qualcosa per tutti i client non ha un elenco separato dei soli attivi, ha solo l'array di 1000 slot (MAX_CLIENT)
+        // dove alcuni sono occupati e altri vuoti sparsi ovunque, quindi scorre tutte le caselle
         for (int i = 0; i < MAX_CLIENT; i++) {
+            // salta le caselle vuote (giocatori[i].attivo = 0)
             if (!giocatori[i].attivo) continue;
+            // aggiunge il file descriptor del client attivi al set di lettura, 
+            // in modo che select possa monitorarlo e dirmi quando ci sono dati pronti da leggere
             FD_SET(giocatori[i].fd, &rfds);
+            
+            // aggiunge il file descriptor del client attivo al set di scrittura, solo se la coda di output non è vuota,
+            // quindi solo se ho effettivamente qualcosa da mandargli, non quando è semplicemente pronto a ricevere dati
+            // così select può addormentarsi tranquillo finchè non c'è davvero lavoro da fare
             if (!coda_vuota(&giocatori[i].out))
                 FD_SET(giocatori[i].fd, &wfds);
+            
+            // ricontrollo maxfd per essere sicuro che sia sempre il più grande tra i fd aggiunti ai set
             if (giocatori[i].fd > maxfd) maxfd = giocatori[i].fd;
         }
 
         /* timeout: quanto manca al prossimo broadcast / alla fine partita */
+        
+        // timeval che specifica alla select quanto tempo deve aspettare prima di svegliarsi
+        // se si svegliasse solo quando ci sono socket pronti (con NULL) non farebbe mai il broadcast periodico o la fine partita, quindi devo dargli un timeout
+        // ne inizializzo 2 perchè uno lo devo modificare e l'altro lo devo passare a select come puntatore (poi li associo alla fine)
         struct timeval tv, *ptv = NULL;
+        
+        // isolo durante una partita servono le scadenze. Se la partita è ferma allora ptv resta NULL e select si sveglia solo quando ci sono socket pronti
         if (partita.stato == PARTITA_ATTIVA) {
+            // calcola quanto manca al prossimo broadcast, che è T_BROADCAST secondi dopo l'ultimo broadcast
             int al_broadcast = T_BROADCAST - (int)(time(NULL) - ultimo_broadcast);
+            // se il momento è già passato, lo imposto a 0 così select si sveglia subito
             if (al_broadcast < 0) al_broadcast = 0;
+            // calcola quanto manca alla fine della partita
             int al_fine = gioco_secondi_residui(&partita);
+            // scegli il tempo minore tra i due
             int w = (al_broadcast < al_fine) ? al_broadcast : al_fine;
+            // imposta i secondi del timeval al tempo minore calcolato (e i microsecondi a 0 perchè non mi interessano)
             tv.tv_sec = w;
             tv.tv_usec = 0;
+            // ora che l'ho modificato riassegnandolo al puntatore posso passarlo poi a select 
             ptv = &tv;
         }
 
+        // partita ferma = ptv == NULL = select si sveglia solo quando ci sono socket pronti, partita attiva = ptv != NULL = select si sveglia anche quando scade il timeout
+        // 
         int pronti = select(maxfd + 1, &rfds, &wfds, NULL, ptv);
         if (pronti < 0) {
             if (errno == EINTR) continue;   /* segnale: riprova (o esci se fermati) */

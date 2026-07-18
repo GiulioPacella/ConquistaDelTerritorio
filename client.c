@@ -22,7 +22,7 @@
  * volta (framing a '\n', come il server). Il client è "stupido": inoltra i
  * comandi e disegna ciò che riceve; tutta la logica è sul server.
  *
- * Comandi: si possono digitare direttamente (REGISTER/LOGIN/MOVE/WHO/MAP/QUIT)
+ * Comandi: si possono digitare direttamente (REGISTER/LOGIN/MOVE/WHO/QUIT)
  * oppure usare le scorciatoie di movimento W/A/S/D (su/sinistra/giù/destra).
  */
 
@@ -47,6 +47,7 @@ static int  cli_self_x = -1, cli_self_y = -1;      /* mia posizione corrente    
 static int  cli_pronto = 0;                        /* 1 quando c'e' una mappa da disegnare         */
 static time_t cli_flash_fine = 0;                  /* istante di spegnimento della "luce globale"; 0 = spenta */
 
+// azzera la memoria del client della mappa, in modo che non ci siano dati residui da una partita precedente
 static void reset_modello(void) {
     for (int y = 0; y < MAPPA_H; y++)
         for (int x = 0; x < MAPPA_W; x++)
@@ -149,7 +150,7 @@ static void stampa_legenda(void) {
 
 static void stampa_aiuto(void) {
     printf("=== Conquista del territorio — client ===\n");
-    printf("Comandi: REGISTER <nick> <pass> | LOGIN <nick> <pass> | WHO | MAP | QUIT\n");
+    printf("Comandi: REGISTER <nick> <pass> | LOGIN <nick> <pass> | WHO | QUIT\n");
     printf("Movimento: MOVE <U|D|L|R>  oppure le scorciatoie  W A S D\n");
     stampa_legenda();
     printf("=========================================\n");
@@ -257,12 +258,19 @@ static void rendi_blocco(void) {
 
 /* Processa una riga ricevuta dal server. */
 static void processa_server(const char *linea) {
-    if (in_blocco) {
+    // se in_blocco è 1 significa che il client sta leggendo un blocco di messaggi multi-riga (LOCAL, GLOBAL, USERS, GAMEOVER)
+    if (in_blocco) 
+    {
+        // se la riga è REP_END significa che il blocco di messaggi multi-riga è terminato, quindi chiama rendi_blocco() per processare
+        // il blocco e azzera in_blocco e n_corpo
         if (strcmp(linea, REP_END) == 0) {
             rendi_blocco();
             in_blocco = 0;
             n_corpo = 0;
-        } else if (n_corpo < MAX_RIGHE) {
+        } 
+        // altrimenti se n_corpo < MAX_RIGHE significa che il blocco non è terminato e c'è ancora spazio nel buffer corpo,
+        // quindi copia la riga in corpo[n_corpo] e incrementa n_corpo
+        else if (n_corpo < MAX_RIGHE) {
             snprintf(corpo[n_corpo], MAX_COLS, "%s", linea);
             n_corpo++;
         }
@@ -270,6 +278,7 @@ static void processa_server(const char *linea) {
     }
 
     /* riga di intestazione */
+    // se la riga inizia con REP_OK o REP_ERR significa che è una risposta a un comando del client, quindi cerca "id=" per estrarre l'id del giocatore
     if (strncmp(linea, REP_OK, strlen(REP_OK)) == 0 ||
         strncmp(linea, REP_ERR, strlen(REP_ERR)) == 0) {
         const char *p = strstr(linea, "id=");   /* "OK login id=<n>" */
@@ -278,10 +287,15 @@ static void processa_server(const char *linea) {
         fflush(stdout);
         return;
     }
-    if (strncmp(linea, REP_LOCAL, strlen(REP_LOCAL)) == 0 ||
+    if 
+    // casi in cui incontra un blocco di messaggi multi-riga (LOCAL, GLOBAL, USERS, GAMEOVER)
+    (
+        // compara strlen(REP_LOCAL) caratteri di linea con REP_LOCAL, se sono uguali ritorna 0
+        strncmp(linea, REP_LOCAL, strlen(REP_LOCAL)) == 0 ||
         strncmp(linea, REP_GLOBAL, strlen(REP_GLOBAL)) == 0 ||
         strncmp(linea, REP_USERS, strlen(REP_USERS)) == 0 ||
         strncmp(linea, REP_GAMEOVER, strlen(REP_GAMEOVER)) == 0) {
+        // scrive linea in header 
         snprintf(header, sizeof header, "%s", linea);
         in_blocco = 1;
         n_corpo = 0;
@@ -330,6 +344,7 @@ static void gestisci_input(int fd, const char *linea) {
 }
 
 int main(int argc, char *argv[]) {
+    // controlla la validità degli argomenti
     if (argc != 3) {
         fprintf(stderr, "uso: %s <host> <porta>\n", argv[0]);
         return 1;
@@ -346,20 +361,30 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // gestione dei segnali: ignora SIGPIPE (altrimenti il client termina se il server chiude la connessione)
     signal(SIGPIPE, SIG_IGN);
+    // abilita i colori se l'output è un terminale
     usa_colori = isatty(STDOUT_FILENO);
+
+    // azzera il modello della mappa, in modo che non ci siano dati residui da una partita precedente
     reset_modello();
+
     stampa_aiuto();
 
+    // crea i buffer per la lettura dei dati dal server e dalla tastiera, e li inizializza
     BufferIn rete, tast;
     buf_in_init(&rete);
     buf_in_init(&tast);
 
     int attivo = 1;
     while (attivo) {
+        // inizializziamo il set di file descriptor da monitorare per la lettura, 
+        // il client deve ascoltare la tastiera (quello che scrivi tu) e il server (le risposte che ti manda)
         fd_set rfds;
         FD_ZERO(&rfds);
+        // aggiunge la tastiera al set di file descriptor da monitorare per la lettura
         FD_SET(STDIN_FILENO, &rfds);
+        // aggiunge il server al set di file descriptor da monitorare per la lettura
         FD_SET(fd, &rfds);
         int maxfd = (fd > STDIN_FILENO) ? fd : STDIN_FILENO;
 
@@ -387,10 +412,13 @@ int main(int argc, char *argv[]) {
         if (p == 0) continue;   /* timeout: il prossimo giro spegne la luce */
 
         /* --- dati dal server --- */
+        // se è rimasto nel set vuol dire che ci sono dei dati da leggere dal server, quindi li leggiamo e li processiamo
         if (FD_ISSET(fd, &rfds)) {
             char tmp[2048];
             ssize_t n = read(fd, tmp, sizeof tmp);
             if (n > 0) {
+                // aggiungi i dati letti dal server al buffer di rete, e poi estrai le righe complete dal buffer e processale
+                // questa parte è uguale a quella che c'è in server.c
                 buf_in_aggiungi(&rete, tmp, (size_t)n);
                 char l[MAX_LINE + 1];
                 int r;

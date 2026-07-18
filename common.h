@@ -53,7 +53,7 @@
 /* ===== Macchina a stati del client (vista dal server) ===== */
 typedef enum {
     ST_CONNESSO = 0,  /* connesso ma non loggato: ammessi REGISTER, LOGIN, QUIT   */
-    ST_IN_GIOCO       /* loggato / in gioco: ammessi MOVE, WHO, MAP, QUIT         */
+    ST_IN_GIOCO       /* loggato / in gioco: ammessi MOVE, WHO, QUIT              */
 } StatoClient;
 
 /* ===== Stato globale della partita ===== */

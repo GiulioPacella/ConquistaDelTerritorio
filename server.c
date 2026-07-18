@@ -212,14 +212,6 @@ static int gestisci_riga(int i, char *linea) {
         return 0;
     }
 
-    /* ---- MAP: solo IN_GIOCO ---- */
-    if (strcmp(cmd, CMD_MAP) == 0) {
-        if (g->stato != ST_IN_GIOCO) { srv_err(g, "devi prima fare LOGIN"); return 0; }
-        gioco_aggiorna_punteggi(&partita, giocatori, MAX_CLIENT);
-        invia_global(&g->out, &partita, giocatori, MAX_CLIENT);
-        return 0;
-    }
-
     srv_err(g, "comando sconosciuto");
     return 0;
 }
@@ -255,12 +247,16 @@ static void accetta_connessioni(void) {
 
 /* ===== Lettura dati da un client ===== */
 static void servi_lettura(int i) {
+    // buffer temporaneo per leggere i dati dal socket, di dimensione 2048 byte
     char tmp[2048];
+    // read legge i dati dal socket del client e li mette nel buffer tmp, fino a sizeof(tmp) byte 
+    // e restituisce il numero di byte letti, 0 se il client ha chiuso la connessione, -1 se c'è stato un errore
     ssize_t n = read(giocatori[i].fd, tmp, sizeof tmp);
     if (n > 0) {
         buf_in_aggiungi(&giocatori[i].in, tmp, (size_t)n);
         char linea[MAX_LINE + 1];
         int r;
+        // estrai riga restituisce 1 se ha estratto una riga completa, 0 se non c'è una riga completa, -1 se la riga è troppo lunga e va scartata
         while ((r = buf_in_estrai_riga(&giocatori[i].in, linea, sizeof linea)) != 0) {
             if (r == -1) {
                 srv_err(&giocatori[i], "riga troppo lunga");
@@ -272,6 +268,7 @@ static void servi_lettura(int i) {
             }
         }
     } else if (n == 0) {
+        // vuol dire che il client ha chiuso la connessione, quindi rimuovo il client dallo slot
         rimuovi_client(i);                        /* disconnessione ordinata */
     } else {
         if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
@@ -405,8 +402,10 @@ int main(int argc, char *argv[]) {
         }
 
         // partita ferma = ptv == NULL = select si sveglia solo quando ci sono socket pronti, partita attiva = ptv != NULL = select si sveglia anche quando scade il timeout
-        // 
+        // select restituisce il numero di socket pronti, 0 se è scaduto il timeout senza socket pronti, -1 se c'è stato un errore
         int pronti = select(maxfd + 1, &rfds, &wfds, NULL, ptv);
+        // indica che select ha fallito, in quel caso select imposta errno a un valore che indica il tipo di errore
+        // se errno == EINTR significa che select è stata interrotta da un segnale, quindi riprovo a chiamarla, altrimenti esco dal loop perchè c'è stato un errore fatale
         if (pronti < 0) {
             if (errno == EINTR) continue;   /* segnale: riprova (o esci se fermati) */
             break;                          /* errore fatale */
@@ -421,19 +420,28 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // se select è scaduta senza socket pronti, non c'è altro da fare tranne i compiti periodici fatti sopra, quindi ricomincia il loop
         if (pronti == 0) continue;          /* solo timeout: nient'altro da fare */
 
         /* --- nuove connessioni --- */
+        // visto che select rimuove dai fd_set i file descriptor che non sono pronti, se listen_fd è ancora presente in rfds
+        // significa che c'è una nuova connessione pronta da accettare
         if (FD_ISSET(listen_fd, &rfds))
             accetta_connessioni();
 
         /* --- attività sui client --- */
+        // scorre tutti i giocatori
         for (int i = 0; i < MAX_CLIENT; i++) {
+            // se il giocatore non è attivo, salta lo slot
             if (!giocatori[i].attivo) continue;
+            // se il fd del giocatore è pronto in lettura, allora servi_lettura
+            // servi_lettura però può aver rimosso il client durante l'elaborazione, se per esempio ha ricevuto un QUIT o ha letto un EOF(disconnessione)
+            // quindi se dopo la lettura il giocatore non è più attivo, salta al prossimo slot
             if (FD_ISSET(giocatori[i].fd, &rfds)) {
                 servi_lettura(i);
                 if (!giocatori[i].attivo) continue;  /* potrebbe essere stato rimosso */
             }
+            // se il fd è pronto in scrittura
             if (FD_ISSET(giocatori[i].fd, &wfds)) {
                 if (coda_drena(&giocatori[i].out, giocatori[i].fd) < 0)
                     rimuovi_client(i);

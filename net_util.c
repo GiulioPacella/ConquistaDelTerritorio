@@ -38,10 +38,13 @@ void buf_in_aggiungi(BufferIn *b, const char *src, size_t n) {
 }
 
 int buf_in_estrai_riga(BufferIn *b, char *out, size_t outsz) {
+    // memchr cerca un byte dentro un blocco di memoria e ti dice dove si trova, se non lo trova ritorna NULL
+    // cerca il primo '\n' dentro b->dati, fino a b->len byte
     char *nl = memchr(b->dati, '\n', b->len);
+    // se non trova un '\n', allora restituisce NULL
     if (nl == NULL) {
-        /* Nessuna riga completa. Se ciò che è accumulato supera già MAX_LINE,
-           la riga in corso è troppo lunga: scarta e segnala. */
+        // se la lunghezza del buffer è maggiore o uguale a MAX_LINE, allora significa che la riga è troppo lunga e va scartata,
+        // quindi mette in guardia il buf_in_aggiungi che gli arriverà il resto della riga troppo lunga (settando scartando = 1) e dovrà scartarlo fino al prossimo '\n'
         if (b->len >= MAX_LINE) {
             b->len = 0;
             b->scartando = 1;
@@ -50,23 +53,31 @@ int buf_in_estrai_riga(BufferIn *b, char *out, size_t outsz) {
         return 0;
     }
 
+    // calcola quanti byte di sono prima del /n (contenuto vero e proprio della riga, senza il terminatore)
     size_t linelen = (size_t)(nl - b->dati);   /* byte prima del '\n'        */
+    // gli stessi byte più 1 per includere il terminatore '\n' (che poi verrà rimosso dal buffer)
     size_t consuma = linelen + 1;              /* includi il '\n'            */
+    // è un caso limite per gestire il caso in cui la riga sia più lunga di MAX_LINE però ha un terminatore, quindi non può essere copiata in out
     int troppo_lunga = (linelen > MAX_LINE);
 
     if (!troppo_lunga) {
         size_t copylen = linelen;
-        /* tollera terminazione CRLF: rimuovi un eventuale '\r' finale */
+        // tollera terminazione CRLF: rimuovi un eventuale '\r' finale, alcuni client lo fanno (Windows, telnet,...)
         if (copylen > 0 && b->dati[copylen - 1] == '\r') copylen--;
-        if (copylen >= outsz) copylen = outsz - 1; /* sicurezza */
+        // sicurezza in piu: se la riga è più lunga di outsz (ovvero il buffer del chiamante 
+        // linea[MAX_LINE+1]), copia solo outsz-1 byte e termina con '\0' (per evitare buffer overflow)
+        if (copylen >= outsz) copylen = outsz - 1;
+        // copia i copylen byte della riga (senza /r e /n) dall'inizio del buffer in out
         memcpy(out, b->dati, copylen);
+        // aggiunge il terminatore nullo, trasformando i byte grezzi in una stringa C valida per permettere al chiamante di usare funzioni come strcmp, printf, ecc
         out[copylen] = '\0';
     }
 
-    /* compatta il buffer rimuovendo la riga consumata */
+    // ora che la riga è stata consumata può essere rimossa dal buffer, spostando i byte rimanenti all'inizio del buffer e aggiornando la lunghezza
     memmove(b->dati, b->dati + consuma, b->len - consuma);
     b->len -= consuma;
 
+    // anche qua il ritorno è lo stesso di prima: 1 se la riga è stata estratta correttamente, -1 se era troppo lunga e va scartata
     return troppo_lunga ? -1 : 1;
 }
 
@@ -194,25 +205,39 @@ int crea_listening_socket(int porta) {
     return fd;
 }
 
+// apre la connessione TCP dal client verso il server,
+// prende host e porta resittuisce un file descriptor connesso o -1 in caso di errore
 int connetti_a(const char *host, int porta) {
+    // trasforma porta in stringa, perché getaddrinfo prende come argomento la porta come stringa
     char servizio[16];
     snprintf(servizio, sizeof servizio, "%d", porta);
 
+    // vengono impostati tutti i parametri per la ricerca dell'indirizzo del server, in particolare:
+    // hints.ai_family = AF_INET indica che vogliamo solo indirizzi IPv4
+    // hints.ai_socktype = SOCK_STREAM indica che vogliamo solo socket TCP
     struct addrinfo hints, *res, *rp;
     memset(&hints, 0, sizeof hints);
     hints.ai_family   = AF_INET;       /* IPv4 */
     hints.ai_socktype = SOCK_STREAM;   /* TCP  */
 
+    // getaddrinfo risolve il nome host e la porta in una lista di indirizzi, che vengono restituiti in res
+    // se fallisce ritorna -1, altrimenti res punta a una lista di strutture addrinfo che contengono gli indirizzi del server
+    
     if (getaddrinfo(host, servizio, &hints, &res) != 0) return -1;
 
     int fd = -1;
+    // rp = puntatore alla lista di indirizzi restituiti da getaddrinfo, che viene scorsa per provare a connettersi a ciascun indirizzo fino a trovare quello corretto
+    // il server può avere piu' indirizzi (IPv4, IPv6, hostname con piu' record A, ecc), quindi si prova a connettersi a ciascuno finché uno non funziona
     for (rp = res; rp != NULL; rp = rp->ai_next) {
+        // viene creata la socket per la comunicazione
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (fd < 0) continue;
+        // se la connessione riesce si esce dal ciclo, altrimenti si chiude la socket e si prova con il prossimo indirizzo
         if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0) break;  /* connesso */
         close(fd);
         fd = -1;
     }
+    // libera la memoria che getaddrinfo aveva occupato per creare la lista di indirizzi
     freeaddrinfo(res);
     return fd;
 }

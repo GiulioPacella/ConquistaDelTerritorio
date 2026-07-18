@@ -149,7 +149,7 @@ byte in un buffer ed estraggono **una riga completa per volta** (*framing*).
 
 ### Client → Server
 `REGISTER <nick> <pass>` · `LOGIN <nick> <pass>` · `MOVE <U|D|L|R>` · `WHO` ·
-`MAP` · `QUIT`
+`QUIT`
 
 ### Server → Client
 `OK [msg]` · `ERR <msg>` · `LOCAL …` · `GLOBAL …` · `USERS …` · `GAMEOVER …`
@@ -298,7 +298,7 @@ Ogni client ha un `BufferIn`. Dopo ogni `read()` i byte grezzi sono accodati
 (`buf_in_estrai_riga`, che cerca `\n`, tollera `\r\n` e gli spazi multipli). Una
 riga più lunga di `MAX_LINE` (1024) viene **scartata** con `ERR`, proteggendo da
 input malevolo. Letture spezzate (`LOG` + `IN mario pwd\n`) e aggregate
-(`WHO\nMAP\n`) sono gestite correttamente.
+(`WHO\nWHO\n`) sono gestite correttamente.
 
 ### Coda di output — write parziali ed EAGAIN
 Con socket non bloccanti anche `send()` può scrivere parzialmente o restituire
@@ -346,7 +346,7 @@ rigenera la mappa e rifà spawnare tutti). I client sono utilizzabili senza riav
 
 ### Macchina a stati del client (enforce sul server)
 - `ST_CONNESSO`: ammessi solo `REGISTER`, `LOGIN`, `QUIT`;
-- `ST_IN_GIOCO`: ammessi `MOVE`, `WHO`, `MAP`, `QUIT`.
+- `ST_IN_GIOCO`: ammessi `MOVE`, `WHO`, `QUIT`.
 Un comando valido ma nello stato sbagliato produce un `ERR` esplicativo
 (es. `MOVE` prima del login → `ERR devi prima fare LOGIN`).
 

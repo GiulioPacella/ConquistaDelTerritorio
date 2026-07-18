@@ -8,3 +8,10 @@
 # Dati a runtime (account con password in chiaro)
 users.dat
 .codegraphy/*
+
+# File di spiegazione del progetto
+relazione.tex
+README.md
+come_funziona.md
+RELAZIONE.md
+

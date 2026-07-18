@@ -20,7 +20,6 @@
  *   LOGIN    <nick> <pass>   autentica ed entra in gioco
  *   MOVE     <U|D|L|R>       muove di una cella (Up/Down/Left/Right)
  *   WHO                      richiede l'elenco dei giocatori loggati (USERS)
- *   MAP                      richiede subito una mappa globale (GLOBAL)
  *   QUIT                     chiude la sessione
  *
  * ------------------------------------------------------------------------
@@ -63,7 +62,6 @@
 #define CMD_LOGIN    "LOGIN"
 #define CMD_MOVE     "MOVE"
 #define CMD_WHO      "WHO"
-#define CMD_MAP      "MAP"
 #define CMD_QUIT     "QUIT"
 
 /* ----- Risposte Server -> Client ----- */

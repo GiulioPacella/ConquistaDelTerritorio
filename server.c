@@ -170,7 +170,12 @@ static int gestisci_riga(int i, char *linea) {
         memset(g->scoperto, 0, sizeof g->scoperto);
 
         if (partita.stato != PARTITA_ATTIVA) {
-            avvia_nuova_partita();    /* spawna anche questo giocatore */
+            /* Durante la pausa post-GAMEOVER nemmeno un nuovo login fa ripartire
+               la partita: altrimenti chi entra in quel momento cancellerebbe la
+               classifica agli altri. Resta loggato in attesa e verrà spawnato
+               da avvia_nuova_partita al primo MOVE utile. */
+            if (gioco_pausa_residua(&partita) == 0)
+                avvia_nuova_partita();    /* spawna anche questo giocatore */
         } else {
             gioco_spawn(&partita, &g->x, &g->y);
             partita.proprieta[g->y][g->x] = g->id;
@@ -192,8 +197,20 @@ static int gestisci_riga(int i, char *linea) {
         if (d == NULL || d[1] != '\0') { srv_err(g, "uso: MOVE <U|D|L|R>"); return 0; }
         char dir = (char)toupper((unsigned char)d[0]);
 
-        if (partita.stato != PARTITA_ATTIVA)
+        if (partita.stato != PARTITA_ATTIVA) {
+            /* Pausa post-GAMEOVER: il movimento non riavvia nulla, così la
+               classifica resta leggibile invece di essere spazzata via dal
+               primo tasto premuto. */
+            int attesa = gioco_pausa_residua(&partita);
+            if (attesa > 0) {
+                char msg[80];
+                snprintf(msg, sizeof msg,
+                         "partita finita: nuova partita fra %d s", attesa);
+                srv_err(g, msg);
+                return 0;
+            }
             avvia_nuova_partita();     /* riparte una nuova partita */
+        }
 
         int r = gioco_move(&partita, g, dir);
         switch (r) {
@@ -338,6 +355,7 @@ int main(int argc, char *argv[]) {
     }
 
     partita.stato = PARTITA_FERMA;
+    partita.fine  = 0;            /* nessun GAMEOVER ancora: nessuna pausa iniziale */
     ultimo_broadcast = time(NULL);
 
     /* ===== Loop principale ===== */

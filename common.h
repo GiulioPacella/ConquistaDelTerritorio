@@ -26,6 +26,8 @@
 #define T_BROADCAST    20     /* secondi tra un broadcast GLOBAL e il successivo */
 #define T_FLASH        2    /* durata della "luce globale" dopo ogni GLOBAL (s); < T_BROADCAST */
 #define T_PARTITA      100  /* durata massima di una partita, in secondi       */
+#define T_PAUSA        10   /* pausa dopo il GAMEOVER: per questi secondi la classifica
+                               resta leggibile e MOVE/LOGIN non avviano una nuova partita */
 #define DENSITA_MURI   20    /* densità muri in percentuale (~20%)              */
 
 /* ===== Limiti e protezione contro input malevolo ===== */

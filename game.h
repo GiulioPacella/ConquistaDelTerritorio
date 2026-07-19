@@ -40,6 +40,7 @@ typedef struct {
     int           proprieta[MAPPA_H][MAPPA_W]; /* id proprietario, -1 = nessuno */
     StatoPartita  stato;                       /* FERMA / ATTIVA                */
     time_t        inizio;                      /* istante di avvio partita      */
+    time_t        fine;                        /* istante dell'ultimo GAMEOVER  */
 } Mappa;
 
 /* ===== Ciclo di vita della partita ===== */
@@ -48,6 +49,9 @@ void gioco_avvia(Mappa *m, unsigned int seed);        /* genera mappa, stato=ATT
 void gioco_termina(Mappa *m);                         /* stato=FERMA                    */
 int  gioco_scaduta(const Mappa *m);                   /* 1 se trascorsi >= T_PARTITA s  */
 int  gioco_secondi_residui(const Mappa *m);           /* secondi mancanti alla fine     */
+/* Secondi ancora da attendere prima che sia lecito avviare una nuova partita
+   (pausa post-GAMEOVER). 0 = si può ripartire subito. */
+int  gioco_pausa_residua(const Mappa *m);
 
 /* ===== Posizionamento e movimento ===== */
 /* Sceglie una cella libera casuale e la scrive in *x,*y. 0 = ok, -1 = mappa piena. */

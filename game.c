@@ -28,6 +28,15 @@ void gioco_avvia(Mappa *m, unsigned int seed) {
 
 void gioco_termina(Mappa *m) {
     m->stato = PARTITA_FERMA;
+    m->fine  = time(NULL);   /* da qui parte la pausa di T_PAUSA secondi */
+}
+
+int gioco_pausa_residua(const Mappa *m) {
+    if (m->stato == PARTITA_ATTIVA) return 0;
+    if (m->fine == 0)               return 0;   /* nessuna partita conclusa finora */
+    int trascorsi = (int)(time(NULL) - m->fine);
+    int residui = T_PAUSA - trascorsi;
+    return residui > 0 ? residui : 0;
 }
 
 int gioco_scaduta(const Mappa *m) {

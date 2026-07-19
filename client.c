@@ -242,7 +242,8 @@ static void rendi_gameover(void) {
             printf("    %d) %-16s %d celle\n", pos, nick, score);
     }
     printf("###################################################\n");
-    printf("(resti connesso: il prossimo MOVE/LOGIN avvia una nuova partita)\n");
+    printf("(resti connesso: fra %d secondi il prossimo movimento avvia una nuova partita)\n",
+           T_PAUSA);
     fflush(stdout);
 }
 

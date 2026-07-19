@@ -149,8 +149,14 @@ int coda_drena(CodaOut *c, int fd) {
 /* ======================= Socket ======================= */
 
 int imposta_nonblocking(int fd) {
+    // fcntl manipola le proprietà di un file descriptor, in questo caso il socket fd
+    // F_GETFL = get file status flags, ottiene le flag correnti del file descriptor, che indicano lo stato del file (ad esempio se è in modalità bloccante o non bloccante)
+    // se fallisce ritorna -1
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0) return -1;
+    // F_SETFL = set file status flags, imposta le flag del file descriptor
+    // O_NONBLOCK = imposta il file descriptor in modalità non bloccante, ovvero le operazioni di lettura e 
+    //scrittura sul socket non bloccheranno il programma se non ci sono dati disponibili o se il buffer è pieno
     if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) return -1;
     return 0;
 }

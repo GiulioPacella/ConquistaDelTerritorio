@@ -1,0 +1,24 @@
+
+services:
+  server:
+    build:
+      context: .
+      target: server
+    command: ["8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - dati:/data
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      target: client
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+
+volumes:
+  dati:

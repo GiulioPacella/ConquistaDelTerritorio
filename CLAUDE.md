@@ -60,9 +60,9 @@ esecuzione elimina le race condition senza lock. Il client inoltra comandi e non
 decide nulla, ma mantiene un **modello locale persistente** di ciò che ha visto
 (muri scoperti, proprietà, posizioni) per il rendering.
 
-**Documentazione:** `RELAZIONE.md` è la relazione tecnica di riferimento (architettura, protocollo, loop, casi limite); `come_funziona.md` è una spiegazione discorsiva più didattica. `README.md` è la guida utente — nota che alcuni suoi valori sono disallineati (cita mappa 30×30 e finestra 7×7): fa fede `common.h` (20×20, torcia 5×5).
+**Documentazione:** questo file è il riferimento sull'architettura. `README.md` è la guida utente: esiste solo in locale (è in `.gitignore`, non versionato) e alcuni suoi valori sono disallineati (cita mappa 30×30 e finestra 7×7) — fa fede `common.h` (20×20, torcia 5×5).
 
-**Moduli** (vedi `RELAZIONE.md` per il dettaglio):
+**Moduli:**
 - `common.h` — parametri (`MAPPA_H/W` 20x20, `R_FOG` 2 → torcia 5x5, `T_BROADCAST`, `T_FLASH` durata "luce globale", `T_PARTITA`, `DENSITA_MURI`, limiti), enum `StatoClient`/`StatoPartita`.
 - `protocol.h` — costanti del protocollo e `simbolo_proprietario(id)` (id→carattere mappa).
 - `net_util.[ch]` — `BufferIn` (framing a righe `\n`, gestisce letture parziali/aggregate, cap `MAX_LINE`), `CodaOut` (coda output dinamica per write parziali/`EAGAIN`), creazione listening socket / connect, non-blocking.
@@ -79,7 +79,9 @@ decide nulla, ma mantiene un **modello locale persistente** di ciò che ha visto
 - **Identità**: `id` = indice di slot in `giocatori[MAX_CLIENT]`, stabile, mappato a un carattere sulla mappa. Le celle conquistate persistono con quell'id anche dopo la disconnessione (limite noto: riuso slot eredita le celle; azzerate a fine partita).
 - **Macchina a stati**: `ST_CONNESSO` ammette solo `REGISTER/LOGIN/QUIT`; `ST_IN_GIOCO` ammette `MOVE/WHO/QUIT`. Comando valido ma in stato errato → `ERR` esplicativo. Il dispatch è in `gestisci_riga`.
 - **Ciclo di vita partita**: parte al primo `LOGIN` (`avvia_nuova_partita`); a `T_PARTITA` scaduto → `GAMEOVER` + `termina_partita` (azzeramento, stato `PARTITA_FERMA`); i client restano loggati e una nuova partita riparte al primo `MOVE`/`LOGIN` successivo, senza riavvio.
+- **Conquista e punteggio** (`game.c`): muoversi su una cella libera la conquista (`m->proprieta[ny][nx] = g->id`), ribaltando anche celle già di altri; i muri bloccano. Il **punteggio non è incrementale**: `gioco_aggiorna_punteggi` ricalcola ogni volta da zero il conteggio delle celle possedute da ciascun id, e va chiamato **prima** di ogni `invia_global`/`GAMEOVER` perché gli score serializzati siano coerenti.
 - **Fog-of-war (server)**: muri privati per giocatore (`scoperto[][]`), rivelati nella finestra `(2·R_FOG+1)²` a ogni mossa/spawn e accumulati; proprietà delle celle sempre pubbliche nel protocollo (il filtro di visibilità è nel rendering del client).
+- **Segnali e shutdown** (`server.c` `main`): `SIGPIPE` è **ignorato** (`SIG_IGN`) — una write su socket chiuso dal peer torna `EPIPE`, non uccide il processo (per questo si usa anche `MSG_NOSIGNAL`); `SIGINT`/`SIGTERM` (via `sigaction`) impostano un flag che fa uscire dal loop e invoca `chiudi_tutto` per una chiusura ordinata e **valgrind-clean** (libera ogni `CodaOut`).
 - **Rendering e visibilità (client, `client.c`)**: esiste UNA sola mappa disegnata; `LOCAL` (torcia) e `GLOBAL` (snapshot) si fondono sul modello `cli_prop`/`cli_muro`/`cli_altri`. Regole: i **muri scoperti** (`cli_muro`) si disegnano sempre e per sempre; proprietà e giocatori si disegnano **solo dentro la torcia 5x5**, tranne durante la **"luce globale"** (`T_FLASH` secondi dopo ogni `GLOBAL`, spenta dal timeout della `select`) in cui si vede tutto fuorché i muri non scoperti. La torcia è delimitata da una **cornice-corona**: le celle a distanza Chebyshev `R_FOG+1` sono sostituite da `+ - |`. Ogni redraw pulisce schermo e scrollback (`\033[H\033[2J\033[3J`, solo su tty). L'id proprio arriva da `OK login id=<n>`; a `GAMEOVER` il modello si azzera (`reset_modello`).
 
 ### Serializzazione del protocollo

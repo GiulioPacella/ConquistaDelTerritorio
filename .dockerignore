@@ -1,0 +1,13 @@
+# Non copiare nell'immagine artefatti locali e roba inutile al build
+server
+client
+*.o
+users.dat
+.git
+.gitignore
+*.md
+# non servono dentro l'immagine: escluderli evita di invalidare la cache del
+# COPY (e quindi di ricompilare tutto) ogni volta che si tocca il compose
+Dockerfile
+.dockerignore
+docker-compose.yml

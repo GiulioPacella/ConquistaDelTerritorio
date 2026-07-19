@@ -13,20 +13,6 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
-/*
- * client.c — client interattivo non bloccante.
- *
- * Usa select() su due sorgenti: la tastiera (stdin) e il socket verso il
- * server. Così l'utente può digitare comandi mentre i broadcast arrivano, senza
- * mai bloccarsi. I dati dal server sono bufferizzati e processati una riga per
- * volta (framing a '\n', come il server). Il client è "stupido": inoltra i
- * comandi e disegna ciò che riceve; tutta la logica è sul server.
- *
- * Comandi: si possono digitare direttamente (REGISTER/LOGIN/MOVE/WHO/QUIT)
- * oppure usare le scorciatoie di movimento W/A/S/D (su/sinistra/giù/destra).
- */
-
-/* ===== Rendering: colori ANSI opzionali ===== */
 static int usa_colori = 0;
 
 /*

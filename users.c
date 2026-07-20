@@ -6,10 +6,6 @@
 
 #define FILE_UTENTI "users.dat"
 
-/* I buffer di lettura sono dimensionati MAX_NICK+1 / MAX_PASS+1 (= 32). I campi
-   "%31s" nelle fscanf limitano la lettura a 31 caratteri + terminatore, coerenti
-   con MAX_NICK = MAX_PASS = 31. */
-
 int utenti_esiste(const char *nick) {
     FILE *f = fopen(FILE_UTENTI, "r");
     if (f == NULL) return 0;   /* file inesistente: nessun utente registrato */
@@ -17,6 +13,7 @@ int utenti_esiste(const char *nick) {
     char r_nick[MAX_NICK + 1];
     char r_pass[MAX_PASS + 1];
     int trovato = 0;
+    // 31 perchè sono MAX_NICK e MAX_PASS, quindi 31 caratteri + 1 terminatore
     while (fscanf(f, "%31s %31s", r_nick, r_pass) == 2) {
         if (strcmp(r_nick, nick) == 0) {
             trovato = 1;

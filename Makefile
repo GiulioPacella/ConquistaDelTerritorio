@@ -1,6 +1,4 @@
-# Makefile — Conquista del territorio (client/server in C, socket TCP)
-#
-# Target:
+
 #   make          -> compila server e client
 #   make server   -> compila solo il server
 #   make client   -> compila solo il client

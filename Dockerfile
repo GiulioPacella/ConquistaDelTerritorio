@@ -1,5 +1,5 @@
 
-# --- compilazione -------------------------------------------------
+# compilazione
 
     FROM debian:bookworm-slim AS build
 
@@ -12,7 +12,7 @@ COPY . .
 
 RUN make
 
-# --- runtime del client -------------------------------------------
+# runtime del client 
 
 FROM debian:bookworm-slim AS client
 
@@ -21,7 +21,7 @@ COPY --from=build /src/client /app/client
 ENTRYPOINT ["/app/client"]
 CMD ["server", "8080"]
 
-# --- runtime del server -------------------------------------------
+# runtime del server 
 
 FROM debian:bookworm-slim AS server
 

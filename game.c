@@ -7,13 +7,11 @@
 #include <stdio.h>
 #include <time.h>
 
-/* ======================= Ciclo di vita ======================= */
-
 void gioco_genera_mappa(Mappa *m, unsigned int seed) {
     srandom(seed);
     for (int y = 0; y < MAPPA_H; y++) {
         for (int x = 0; x < MAPPA_W; x++) {
-            /* posizionamento pseudo-casuale dei muri secondo la densità scelta */
+            /* posizionamento casuale dei muri secondo la densità scelta */
             m->muri[y][x] = (random() % 100 < DENSITA_MURI) ? 1 : 0;
             m->proprieta[y][x] = -1;   /* nessun proprietario */
         }
@@ -51,7 +49,6 @@ int gioco_secondi_residui(const Mappa *m) {
     return residui > 0 ? residui : 0;
 }
 
-/* ======================= Posizionamento e movimento ======================= */
 
 int gioco_spawn(const Mappa *m, int *x, int *y) {
     /* conta le celle libere */
@@ -125,8 +122,6 @@ void gioco_aggiorna_punteggi(const Mappa *m, Giocatore *giocatori, int n_slot) {
         }
     }
 }
-
-/* ======================= Serializzazione ======================= */
 
 void invia_local(CodaOut *out, const Mappa *m, const Giocatore *g) {
     char riga[64];

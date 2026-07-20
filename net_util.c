@@ -13,7 +13,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-/* ======================= Buffer di INPUT ======================= */
+// Buffer di Input
 
 void buf_in_init(BufferIn *b) {
     b->len = 0;
@@ -81,7 +81,9 @@ int buf_in_estrai_riga(BufferIn *b, char *out, size_t outsz) {
     return troppo_lunga ? -1 : 1;
 }
 
-/* ======================= Coda di OUTPUT ======================= */
+
+
+// Coda di Output
 
 void coda_init(CodaOut *c) {
     c->dati = NULL;
@@ -146,7 +148,8 @@ int coda_drena(CodaOut *c, int fd) {
     return 0;
 }
 
-/* ======================= Socket ======================= */
+
+// Socket 
 
 int imposta_nonblocking(int fd) {
     // fcntl manipola le proprietà di un file descriptor, in questo caso il socket fd

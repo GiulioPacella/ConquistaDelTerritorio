@@ -2,25 +2,21 @@
 #define GAME_H
 
 /*
- * game.h — stato e logica di gioco "Conquista del territorio".
+ * stato e logica di gioco
  *
  * Sistema di coordinate (FISSATO):
  *   - origine (0,0) in alto a sinistra;
  *   - x = colonna, 0..MAPPA_W-1;  y = riga, 0..MAPPA_H-1;
  *   - U = y-1 (su), D = y+1 (giù), L = x-1 (sinistra), R = x+1 (destra).
  *
- * Identità giocatore: l'id coincide con l'indice di slot nell'array dei
- * giocatori del server. Le celle conquistate restano assegnate a quell'id anche
- * dopo la disconnessione (proprietà pubblica e persistente). LIMITE NOTO: se un
- * nuovo client riusa lo stesso slot, eredita quelle celle; è una semplificazione
- * didattica accettabile e in ogni caso lo stato viene azzerato a fine partita.
+ *  l'id coincide con l'indice di slot nell'array dei giocatori del server
  */
 
 #include "common.h"
 #include "net_util.h"
 #include <time.h>
 
-/* ===== Un giocatore (slot del server) ===== */
+// Giocatore: stato di un singolo giocatore (slot del server)
 typedef struct {
     int           attivo;          /* 1 = slot in uso (connessione presente)   */
     int           fd;              /* socket del client; -1 se slot libero     */
@@ -34,7 +30,7 @@ typedef struct {
     CodaOut       out;             /* coda di output                           */
 } Giocatore;
 
-/* ===== Stato del mondo di gioco ===== */
+// stato della mappa di gioco: muri, proprietà delle celle, stato della partita
 typedef struct {
     unsigned char muri[MAPPA_H][MAPPA_W];      /* 1 = muro, 0 = libera          */
     int           proprieta[MAPPA_H][MAPPA_W]; /* id proprietario, -1 = nessuno */
@@ -43,7 +39,7 @@ typedef struct {
     time_t        fine;                        /* istante dell'ultimo GAMEOVER  */
 } Mappa;
 
-/* ===== Ciclo di vita della partita ===== */
+// ciclo di vita della partita 
 void gioco_genera_mappa(Mappa *m, unsigned int seed); /* muri casuali + proprietà = -1 */
 void gioco_avvia(Mappa *m, unsigned int seed);        /* genera mappa, stato=ATTIVA, inizio=ora */
 void gioco_termina(Mappa *m);                         /* stato=FERMA                    */
@@ -53,11 +49,10 @@ int  gioco_secondi_residui(const Mappa *m);           /* secondi mancanti alla f
    (pausa post-GAMEOVER). 0 = si può ripartire subito. */
 int  gioco_pausa_residua(const Mappa *m);
 
-/* ===== Posizionamento e movimento ===== */
-/* Sceglie una cella libera casuale e la scrive in *x,*y. 0 = ok, -1 = mappa piena. */
+// Sceglie una cella libera casuale e la scrive in *x,*y. 0 = ok, -1 = mappa piena.
 int  gioco_spawn(const Mappa *m, int *x, int *y);
 
-/* Rivela nel fog-of-war di g i muri della finestra (2*R_FOG+1) attorno alla sua posizione. */
+// Rivela nel fog-of-war di g i muri della finestra (2*R_FOG+1) attorno alla sua posizione.
 void gioco_rivela_fog(const Mappa *m, Giocatore *g);
 
 /* Esegue una mossa di g nella direzione dir ('U'/'D'/'L'/'R'). Ritorna:
@@ -70,7 +65,7 @@ int  gioco_move(Mappa *m, Giocatore *g, char dir);
 /* Ricalcola g->punteggio (per tutti gli slot attivi) scandendo la mappa. */
 void gioco_aggiorna_punteggi(const Mappa *m, Giocatore *giocatori, int n_slot);
 
-/* ===== Serializzazione dei messaggi (accodati nella CodaOut indicata) ===== */
+// serializzazione: invia messaggi di stato della partita al client
 void invia_local(CodaOut *out, const Mappa *m, const Giocatore *g);
 void invia_global(CodaOut *out, const Mappa *m, const Giocatore *giocatori, int n_slot);
 void invia_users(CodaOut *out, const Giocatore *giocatori, int n_slot);

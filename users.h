@@ -3,11 +3,7 @@
 
 /*
  * users.h — persistenza degli account su file (users.dat).
- *
  * Formato del file: una riga per utente, "nick pass\n".
- * LIMITE NOTO (didattico): la password è memorizzata IN CHIARO. In un sistema
- * reale andrebbe salvato almeno un hash salato; qui si privilegia la
- * semplicità e la leggibilità del file.
  */
 
 /* Ritorna 1 se il nickname esiste già nel file, 0 altrimenti. */

@@ -15,22 +15,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
-/*
- * server.c — server concorrente a singolo processo con select().
- *
- * Un unico loop gestisce: accettazione connessioni, lettura comandi, scrittura
- * (coda di output per client), broadcast periodico e timeout globale della
- * partita. Tutti i socket sono non bloccanti. Nessun fork/thread/IPC: lo stato
- * è in normali strutture in memoria del processo.
- *
- * Vincolo FD_SETSIZE: gli fd devono restare sotto FD_SETSIZE (1024). Con
- * MAX_CLIENT = 64 siamo ampiamente entro il limite.
- *
- * Il server NON scrive su stdout e NON legge da stdin; usa stderr solo per
- * errori fatali in fase di avvio.
- */
 
-/* ===== Stato globale del server ===== */
 // array di 1000 slot per i giocatori, ogni casella può contenere un giocatore connesso o essere vuota
 // è la struct giocatore che tiee traccia dello stato della connessione (giocatore.attivo = 1 se lo slot è occupato dal client, giocatore.attivo = 0 se è libero)
 static Giocatore giocatori[MAX_CLIENT];
@@ -41,7 +26,8 @@ static unsigned int seed_base;
 static int       seed_fisso;                 /* 1 se il seed è fissato da riga di comando */
 static volatile sig_atomic_t fermati = 0;    /* impostato dai segnali per uscire pulito   */
 
-/* ===== Gestione segnali ===== */
+
+// Gestione segnali
 
 // mette il flag fermati a 1, che indica al server di uscire pulito dal loop principale
 static void on_segnale(int s) {
@@ -49,7 +35,7 @@ static void on_segnale(int s) {
     fermati = 1;
 }
 
-/* ===== Helper di risposta ===== */
+// Invia un messaggio di OK al client g, con eventuale messaggio aggiuntivo msg
 static void srv_ok(Giocatore *g, const char *msg) {
     char r[128];
     if (msg != NULL && msg[0] != '\0')
@@ -59,13 +45,15 @@ static void srv_ok(Giocatore *g, const char *msg) {
     coda_accoda_str(&g->out, r);
 }
 
+// Invia un messaggio di ERR al client g, con messaggio di errore msg
 static void srv_err(Giocatore *g, const char *msg) {
     char r[160];
     snprintf(r, sizeof r, "%s %s\n", REP_ERR, msg);
     coda_accoda_str(&g->out, r);
 }
 
-/* ===== Gestione slot/giocatori ===== */
+
+// Gestione giocatori
 
 // Azzera e reimposta lo slot numero i dell'array dei giocatori, rendendolo pronto per essere riusato
 static void slot_init(int i) {
@@ -80,8 +68,7 @@ static void rimuovi_client(int i) {
     if (!giocatori[i].attivo) return;
     close(giocatori[i].fd);
     coda_free(&giocatori[i].out);
-    /* Le celle conquistate da questo id restano sulla mappa (proprietà
-       pubblica e persistente fino a ribaltamento o azzeramento partita). */
+    /* Le celle conquistate da questo id restano sulla mappa fino alla prossima partita, ma il giocatore non è più loggato. */
     slot_init(i);
 }
 
@@ -103,7 +90,7 @@ static void avvia_nuova_partita(void) {
 
 /* Termina la partita: invia GAMEOVER a tutti i loggati e azzera lo stato di
    gioco. I client restano connessi e loggati; una nuova partita ripartirà al
-   primo MOVE/LOGIN successivo. */
+   primo MOVE/LOGIN da dopo il T_PAUSA. */
 static void termina_partita(void) {
     gioco_aggiorna_punteggi(&partita, giocatori, MAX_CLIENT);
     for (int i = 0; i < MAX_CLIENT; i++)
@@ -121,21 +108,21 @@ static void broadcast_global(void) {
     ultimo_broadcast = time(NULL);
 }
 
-/* ===== Dispatch di un comando =====
- * Ritorna 0 per continuare, 1 se la connessione va chiusa (QUIT). */
+// Gestione comandi ricevuti dai client
+// Ritorna 0 per continuare, 1 se la connessione va chiusa (QUIT)
 static int gestisci_riga(int i, char *linea) {
     Giocatore *g = &giocatori[i];
     char *cmd = strtok(linea, " \t");
     if (cmd == NULL) return 0;   /* riga vuota o solo spazi: ignora */
 
-    /* ---- QUIT: valido in ogni stato ---- */
+    /* QUIT: valido in ogni stato */
     if (strcmp(cmd, CMD_QUIT) == 0) {
         srv_ok(g, "arrivederci");
         coda_drena(&g->out, g->fd);   /* best-effort prima di chiudere */
         return 1;
     }
 
-    /* ---- REGISTER: solo da CONNESSO ---- */
+    /* REGISTER: solo da CONNESSO */
     if (strcmp(cmd, CMD_REGISTER) == 0) {
         if (g->stato != ST_CONNESSO) { srv_err(g, "gia' loggato"); return 0; }
         char *nick = strtok(NULL, " \t");
@@ -150,7 +137,7 @@ static int gestisci_riga(int i, char *linea) {
         return 0;
     }
 
-    /* ---- LOGIN: solo da CONNESSO ---- */
+    // LOGIN: solo da CONNESSO
     if (strcmp(cmd, CMD_LOGIN) == 0) {
         if (g->stato != ST_CONNESSO) { srv_err(g, "gia' loggato"); return 0; }
         char *nick = strtok(NULL, " \t");
@@ -190,7 +177,7 @@ static int gestisci_riga(int i, char *linea) {
         return 0;
     }
 
-    /* ---- MOVE: solo IN_GIOCO ---- */
+    // MOVE: solo IN_GIOCO */
     if (strcmp(cmd, CMD_MOVE) == 0) {
         if (g->stato != ST_IN_GIOCO) { srv_err(g, "devi prima fare LOGIN"); return 0; }
         char *d = strtok(NULL, " \t");
@@ -222,7 +209,7 @@ static int gestisci_riga(int i, char *linea) {
         return 0;
     }
 
-    /* ---- WHO: solo IN_GIOCO ---- */
+    /* WHO: solo IN_GIOCO */
     if (strcmp(cmd, CMD_WHO) == 0) {
         if (g->stato != ST_IN_GIOCO) { srv_err(g, "devi prima fare LOGIN"); return 0; }
         invia_users(&g->out, giocatori, MAX_CLIENT);
@@ -233,7 +220,7 @@ static int gestisci_riga(int i, char *linea) {
     return 0;
 }
 
-/* ===== Accettazione nuove connessioni ===== */
+// Accettazione nuove connessioni 
 static void accetta_connessioni(void) {
     for (;;) {
         int fd = accept(listen_fd, NULL, NULL);
@@ -262,7 +249,7 @@ static void accetta_connessioni(void) {
     }
 }
 
-/* ===== Lettura dati da un client ===== */
+// Lettura dati da un client
 static void servi_lettura(int i) {
     // buffer temporaneo per leggere i dati dal socket, di dimensione 2048 byte
     char tmp[2048];
@@ -294,7 +281,6 @@ static void servi_lettura(int i) {
     }
 }
 
-/* ===== Pulizia finale ===== */
 static void chiudi_tutto(void) {
     for (int i = 0; i < MAX_CLIENT; i++)
         if (giocatori[i].attivo) rimuovi_client(i);
@@ -358,7 +344,7 @@ int main(int argc, char *argv[]) {
     partita.fine  = 0;            /* nessun GAMEOVER ancora: nessuna pausa iniziale */
     ultimo_broadcast = time(NULL);
 
-    /* ===== Loop principale ===== */
+    // Loop principale 
     while (!fermati) {
         // preparo i set di file descriptor da passare a select: rfds = read fds, wfds = write fds
         fd_set rfds, wfds;

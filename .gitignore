@@ -4,4 +4,4 @@
 *.o
 users.dat
 .codegraphy/*
-
+*.md
